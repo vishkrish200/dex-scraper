@@ -4,6 +4,7 @@ import fs from "fs";
 import axios from "axios";
 import path from "path";
 
+//Very important, this is used to avoid a site's anit-bot measures
 puppeteer.use(StealthPlugin());
 
 /**
@@ -77,9 +78,6 @@ export async function fetchGeckoTerminalData(chainId, tokenAddress) {
       console.log("Dex Information:", pool.relationships.dex);
       console.log("---------------------------------------");
 
-      // if (flag == true) {
-      //   break;
-      // }
       const transactions = await scrapeGeckoTerminal(
         network,
         pool.attributes.address
@@ -91,7 +89,6 @@ export async function fetchGeckoTerminalData(chainId, tokenAddress) {
         dex: pool.relationships.dex,
         transactions: transactions,
       });
-      // flag = true;
     }
 
     return result;
@@ -115,13 +112,15 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
     await page.setViewport({ width: 1280, height: 800 });
 
     await page.goto(url, { waitUntil: "networkidle2" });
-    console.log("Page loaded:", url);
+    // console.log("Page loaded:", url);
 
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     async function scrollAndCollectTransactions() {
       let transactions = [];
       let transactionSet = new Set();
+      let retries = 0;
+      const maxRetries = 5; // Define maximum retries
 
       const { tableBodyBox, tableHeaderHeight, tableRowHeight } =
         await page.evaluate(() => {
@@ -144,8 +143,9 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
       );
       await page.mouse.wheel({ deltaY: tableHeaderHeight });
       await wait(2000);
+
       let i = 0;
-      for (i = 0; transactions.length < 100; i++) {
+      for (i = 0; transactions.length < 100 && retries < maxRetries; i++) {
         const newTransaction = await page.evaluate(() => {
           const row = document.querySelector("table.absolute tbody tr");
           if (!row) return null;
@@ -155,23 +155,16 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
 
           return {
             time: cells[0].textContent.trim(),
-            trader: cells[1].textContent.trim(),
-            priceInFirstToken: cells[2].textContent
-              .trim()
-              .split(/(?<=[0-9])(?=[A-Za-z])/)[0],
-            priceInUsd: cells[3].textContent
-              .trim()
-              .split(/(?<=[0-9])(?=[A-Za-z])/)[0],
-            amount: cells[4].textContent.trim(),
-            value: cells[5].textContent
-              .trim()
-              .split(/(?<=[0-9])(?=[A-Za-z])/)[0],
+            action: cells[1].textContent.trim().replace(/(Sell|Buy).*/, "$1"),
+            priceInUsd: cells[3].textContent.trim().split("$").pop(),
+            amountOfInputToken: cells[4].textContent.trim(),
+            valueInUsd: cells[5].textContent.trim().split("$").pop(),
             fromLink: links[0].href,
             transactionLink: links[1].href,
           };
         });
 
-        console.log(`Row ${i + 1}:`, newTransaction);
+        // console.log(`Row ${i + 1}:`, newTransaction);
 
         if (
           newTransaction &&
@@ -179,10 +172,22 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
         ) {
           transactionSet.add(newTransaction.transactionLink);
           transactions.push(newTransaction);
-          console.log(
-            `Added transaction ${transactions.length}:`,
-            newTransaction
-          );
+          // console.log(
+          //   `Added transaction ${transactions.length}:`,
+          //   newTransaction
+          // );
+          retries = 0; // Reset retries after a successful transaction
+        } else {
+          retries++;
+          if (retries >= maxRetries) {
+            // console.log(`Max retries reached (${maxRetries}), stopping.`);
+            break;
+          }
+          // console.log(
+          //   `Row ${
+          //     i + 1
+          //   } not fully loaded, retrying... (${retries}/${maxRetries})`
+          // );
         }
 
         await page.mouse.move(
@@ -192,8 +197,8 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
         await page.mouse.wheel({ deltaY: tableRowHeight });
 
         if ((i + 1) % 6 === 0) {
-          console.log(`Waiting for 2 seconds after ${i + 1} rows`);
-          await wait(2000);
+          // console.log(`Waiting for 1.5 seconds after ${i + 1} rows`);
+          await wait(1500);
         } else {
           await wait(1000);
         }
@@ -204,13 +209,14 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
         });
 
         if (!rowLoaded) {
-          console.log(`Row ${i + 1} not fully loaded, retrying...`);
+          // console.log(`Row ${i + 1} not fully loaded, retrying...`);
           i--;
           await wait(2000);
         }
       }
-      console.log("went through ", i, " rows");
-      console.log("Finished scrolling and collecting transactions");
+
+      // console.log("went through ", i, " rows");
+      // console.log("Finished scrolling and collecting transactions");
       return transactions.slice(0, 100);
     }
 
@@ -221,33 +227,43 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
         /(\w+ \d+)(\d{2}:\d{2}:\d{2} [APM]{2})/,
         "$1 $2"
       );
-      transaction.trader = transaction.trader.replace(
-        /(Sell|Buy)(\d+m \d+s)/,
-        "$1 $2"
-      );
+      transaction.action = transaction.action.replace(/(Sell|Buy).*/, "$1");
       return transaction;
     });
 
     parsedTransactions.sort((a, b) => new Date(b.time) - new Date(a.time));
 
-    console.log(`Total transactions collected: ${parsedTransactions.length}`);
+    // console.log(`Total transactions collected: ${parsedTransactions.length}`);
 
     await browser.close();
     return parsedTransactions;
   } catch (error) {
     console.error("Error scraping GeckoTerminal:", error);
+    return []; // Return an empty array in case of error
   }
 }
+
+/**
+ * Main function that fetches data from DexScreener API for a given input and output token,
+ * processes the data, and saves the results in JSON files.
+ */
 export async function main() {
   const inputToken = "PEPE";
   const outputToken = "WETH";
   const dexData = await fetchDexScreenerData(inputToken, outputToken);
 
+  if (!dexData) {
+    console.error("Failed to fetch data from DexScreener");
+    return;
+  }
+
+  //creating a directory to store the output
   const outputDir = "./data";
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir);
   }
 
+  //categorising and storing each paor
   dexData.forEach((pair) => {
     const pairDir = path.join(outputDir, `${pair.baseToken}_${pair.chainId}`);
     if (!fs.existsSync(pairDir)) {

@@ -66,7 +66,7 @@ Also, ensure your `babel.config.cjs` and `jest.config.cjs` files are properly co
 
 1. Run the main scraping agent:
    ```bash
-   node src/scraper.js
+   node src/index.js
    ```
 
 2. The agent will output the trading data to the console and save it to a JSON file in the `data` directory.
