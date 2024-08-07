@@ -145,7 +145,7 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
       await wait(2000);
 
       let i = 0;
-      for (i = 0; transactions.length < 100 && retries < maxRetries; i++) {
+      for (i = 0; transactions.length < 1000 && retries < maxRetries; i++) {
         const newTransaction = await page.evaluate(() => {
           const row = document.querySelector("table.absolute tbody tr");
           if (!row) return null;
@@ -217,7 +217,7 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
 
       // console.log("went through ", i, " rows");
       // console.log("Finished scrolling and collecting transactions");
-      return transactions.slice(0, 100);
+      return transactions.slice(0, 1000);
     }
 
     const transactions = await scrollAndCollectTransactions();
