@@ -1,4 +1,4 @@
-# Trade Scraping API
+# Dex Scraper API
 
 **Objective:** Build a scraping agent that can interact with DEX aggregators to retrieve and display trading data based on specified tokens.
 
@@ -73,7 +73,7 @@ Also, ensure your `babel.config.cjs` and `jest.config.cjs` files are properly co
 
 ## Code Structure
 
-- `src/scraper.js`: The main scraping agent code.
+- `src/index.js`: The main scraping agent code.
 - `test/main.test.js`: Unit tests for the scraping functions.
 - `babel.config.cjs`: Babel configuration file.
 - `jest.config.cjs`: Jest configuration file.
