@@ -2,7 +2,7 @@ import {
   fetchDexScreenerData,
   fetchGeckoTerminalData,
   scrapeGeckoTerminal,
-} from "./main";
+} from "../src/scraper";
 
 jest.mock("axios");
 jest.mock("puppeteer-extra");

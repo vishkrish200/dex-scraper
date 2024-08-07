@@ -11,7 +11,7 @@ puppeteer.use(StealthPlugin());
  * @param {string} inputToken - The input token.
  * @param {string} outputToken - The output token.
  */
-async function fetchDexScreenerData(inputToken, outputToken) {
+export async function fetchDexScreenerData(inputToken, outputToken) {
   const query = `${inputToken}%20${outputToken}`;
   const url = `https://api.dexscreener.com/latest/dex/search/?q=${query}`;
 
@@ -57,7 +57,7 @@ async function fetchDexScreenerData(inputToken, outputToken) {
  * @param {string} chainId - The chain ID.
  * @param {string} tokenAddress - The base token address.
  */
-async function fetchGeckoTerminalData(chainId, tokenAddress) {
+export async function fetchGeckoTerminalData(chainId, tokenAddress) {
   const network = chainId === "ethereum" ? "eth" : chainId;
   const url = `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${tokenAddress}/pools`;
 
@@ -69,7 +69,7 @@ async function fetchGeckoTerminalData(chainId, tokenAddress) {
       .sort((a, b) => b.attributes.reserve_in_usd - a.attributes.reserve_in_usd)
       .slice(0, 3);
     const result = [];
-
+    // let flag = false;
     for (const pool of topPools) {
       console.log("Pool Address:", pool.attributes.address);
       console.log("Network:", network);
@@ -77,6 +77,9 @@ async function fetchGeckoTerminalData(chainId, tokenAddress) {
       console.log("Dex Information:", pool.relationships.dex);
       console.log("---------------------------------------");
 
+      // if (flag == true) {
+      //   break;
+      // }
       const transactions = await scrapeGeckoTerminal(
         network,
         pool.attributes.address
@@ -88,6 +91,7 @@ async function fetchGeckoTerminalData(chainId, tokenAddress) {
         dex: pool.relationships.dex,
         transactions: transactions,
       });
+      // flag = true;
     }
 
     return result;
@@ -101,12 +105,11 @@ async function fetchGeckoTerminalData(chainId, tokenAddress) {
  * @param {string} network - The network.
  * @param {string} poolAddress - The pool address.
  */
-async function scrapeGeckoTerminal(network, poolAddress) {
-  const reqNetwork = network === "ethereum" ? "eth" : network;
-  const url = `https://www.geckoterminal.com/${reqNetwork}/pools/${poolAddress}`;
+export async function scrapeGeckoTerminal(network, poolAddress) {
+  const url = `https://www.geckoterminal.com/${network}/pools/${poolAddress}`;
 
   try {
-    const browser = await puppeteer.launch({ headless: true }); // Set to false for debugging
+    const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
 
     await page.setViewport({ width: 1280, height: 800 });
@@ -141,8 +144,8 @@ async function scrapeGeckoTerminal(network, poolAddress) {
       );
       await page.mouse.wheel({ deltaY: tableHeaderHeight });
       await wait(2000);
-
-      for (let i = 0; i < 100; i++) {
+      let i = 0;
+      for (i = 0; transactions.length < 100; i++) {
         const newTransaction = await page.evaluate(() => {
           const row = document.querySelector("table.absolute tbody tr");
           if (!row) return null;
@@ -163,8 +166,8 @@ async function scrapeGeckoTerminal(network, poolAddress) {
             value: cells[5].textContent
               .trim()
               .split(/(?<=[0-9])(?=[A-Za-z])/)[0],
-            transactionLink: links[0].href,
-            fromLink: links[1].href,
+            fromLink: links[0].href,
+            transactionLink: links[1].href,
           };
         });
 
@@ -206,7 +209,7 @@ async function scrapeGeckoTerminal(network, poolAddress) {
           await wait(2000);
         }
       }
-
+      console.log("went through ", i, " rows");
       console.log("Finished scrolling and collecting transactions");
       return transactions.slice(0, 100);
     }
@@ -228,7 +231,6 @@ async function scrapeGeckoTerminal(network, poolAddress) {
     parsedTransactions.sort((a, b) => new Date(b.time) - new Date(a.time));
 
     console.log(`Total transactions collected: ${parsedTransactions.length}`);
-    console.log("Sample of transactions:", parsedTransactions.slice(0, 5));
 
     await browser.close();
     return parsedTransactions;
@@ -236,8 +238,7 @@ async function scrapeGeckoTerminal(network, poolAddress) {
     console.error("Error scraping GeckoTerminal:", error);
   }
 }
-
-async function main() {
+export async function main() {
   const inputToken = "PEPE";
   const outputToken = "WETH";
   const dexData = await fetchDexScreenerData(inputToken, outputToken);
