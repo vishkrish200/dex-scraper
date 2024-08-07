@@ -299,5 +299,3 @@ Contributions are welcome! Please open an issue or submit a pull request for any
 
 This project is licensed under the MIT License.
 ```
-
-You can copy and paste this content into a `README.md` file in your repository. Make sure to adjust any specific details, such as the repository URL, as needed.
