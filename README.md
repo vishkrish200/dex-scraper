@@ -1,4 +1,3 @@
-```markdown
 # Trade Scraping API
 
 **Objective:** Build a scraping agent that can interact with DEX aggregators to retrieve and display trading data based on specified tokens.
