@@ -3,6 +3,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import fs from "fs";
 import axios from "axios";
 import path from "path";
+import readline from "readline";
 
 //Very important, this is used to avoid a site's anit-bot measures
 puppeteer.use(StealthPlugin());
@@ -11,8 +12,13 @@ puppeteer.use(StealthPlugin());
  * Fetches data from DexScreener API based on input and output tokens and prints specified information.
  * @param {string} inputToken - The input token.
  * @param {string} outputToken - The output token.
+ * @param {integer} transactionCount - The number of transactions to scrape
  */
-export async function fetchDexScreenerData(inputToken, outputToken) {
+export async function fetchDexScreenerData(
+  inputToken,
+  outputToken,
+  transactionCount
+) {
   const query = `${inputToken}%20${outputToken}`;
   const url = `https://api.dexscreener.com/latest/dex/search/?q=${query}`;
 
@@ -35,7 +41,8 @@ export async function fetchDexScreenerData(inputToken, outputToken) {
 
       const geckoData = await fetchGeckoTerminalData(
         pair.chainId,
-        pair.baseToken.address
+        pair.baseToken.address,
+        transactionCount
       );
       result.push({
         baseToken: pair.baseToken.name,
@@ -57,11 +64,15 @@ export async function fetchDexScreenerData(inputToken, outputToken) {
  * Fetches data from GeckoTerminal API based on network and token address.
  * @param {string} chainId - The chain ID.
  * @param {string} tokenAddress - The base token address.
+ * @param {integer} transactionCount - The number of transactions to scrape
  */
-export async function fetchGeckoTerminalData(chainId, tokenAddress) {
+export async function fetchGeckoTerminalData(
+  chainId,
+  tokenAddress,
+  transactionCount
+) {
   const network = chainId === "ethereum" ? "eth" : chainId;
   const url = `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${tokenAddress}/pools`;
-
   try {
     const response = await axios.get(url);
     const data = response.data.data;
@@ -80,7 +91,8 @@ export async function fetchGeckoTerminalData(chainId, tokenAddress) {
 
       const transactions = await scrapeGeckoTerminal(
         network,
-        pool.attributes.address
+        pool.attributes.address,
+        transactionCount
       );
       result.push({
         poolAddress: pool.attributes.address,
@@ -101,8 +113,13 @@ export async function fetchGeckoTerminalData(chainId, tokenAddress) {
  * Scrapes transaction data from GeckoTerminal for a specific pool.
  * @param {string} network - The network.
  * @param {string} poolAddress - The pool address.
+ * @param {integer} transactionCount - The number of transactions to scrape
  */
-export async function scrapeGeckoTerminal(network, poolAddress) {
+export async function scrapeGeckoTerminal(
+  network,
+  poolAddress,
+  transactionCount
+) {
   const url = `https://www.geckoterminal.com/${network}/pools/${poolAddress}`;
 
   try {
@@ -112,7 +129,6 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
     await page.setViewport({ width: 1280, height: 800 });
 
     await page.goto(url, { waitUntil: "networkidle2" });
-    // console.log("Page loaded:", url);
 
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -145,7 +161,7 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
       await wait(2000);
 
       let i = 0;
-      for (i = 0; transactions.length < 1000 && retries < maxRetries; i++) {
+      for (i = 0; transactions.length < 100 && retries < maxRetries; i++) {
         const newTransaction = await page.evaluate(() => {
           const row = document.querySelector("table.absolute tbody tr");
           if (!row) return null;
@@ -172,10 +188,10 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
         ) {
           transactionSet.add(newTransaction.transactionLink);
           transactions.push(newTransaction);
-          // console.log(
-          //   `Added transaction ${transactions.length}:`,
-          //   newTransaction
-          // );
+          console.log(
+            `Added transaction ${transactions.length}:`,
+            newTransaction
+          );
           retries = 0; // Reset retries after a successful transaction
         } else {
           retries++;
@@ -217,7 +233,7 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
 
       // console.log("went through ", i, " rows");
       // console.log("Finished scrolling and collecting transactions");
-      return transactions.slice(0, 1000);
+      return transactions.slice(0, transactionCount);
     }
 
     const transactions = await scrollAndCollectTransactions();
@@ -248,22 +264,46 @@ export async function scrapeGeckoTerminal(network, poolAddress) {
  * processes the data, and saves the results in JSON files.
  */
 export async function main() {
-  const inputToken = "PEPE";
-  const outputToken = "WETH";
-  const dexData = await fetchDexScreenerData(inputToken, outputToken);
+  // Set up readline interface for user input
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  // Promisify the question method for easier async/await usage
+  const askQuestion = (query) =>
+    new Promise((resolve) => rl.question(query, resolve));
+
+  // Ask for user input
+  const inputToken = await askQuestion("Enter the input token: ");
+  const outputToken = await askQuestion("Enter the output token: ");
+  const transactionCount = parseInt(
+    await askQuestion("Enter the number of transactions to scrape: "),
+    10
+  );
+  console.log("---------------------------------------");
+
+  // Close the readline interface after input is received
+  rl.close();
+
+  const dexData = await fetchDexScreenerData(
+    inputToken,
+    outputToken,
+    transactionCount
+  );
 
   if (!dexData) {
     console.error("Failed to fetch data from DexScreener");
     return;
   }
 
-  //creating a directory to store the output
+  // Creating a directory to store the output
   const outputDir = "./data";
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir);
   }
 
-  //categorising and storing each paor
+  // Categorizing and storing each pair
   dexData.forEach((pair) => {
     const pairDir = path.join(outputDir, `${pair.baseToken}_${pair.chainId}`);
     if (!fs.existsSync(pairDir)) {
