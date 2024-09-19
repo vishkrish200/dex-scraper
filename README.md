@@ -21,8 +21,8 @@ This project provides a scraping agent that interacts with DEX aggregators (spec
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/trade-scraping-api.git
-   cd trade-scraping-api
+   git clone https://github.com/your-username/dex-scraper.git
+   cd dex-scraper
    ```
 
 2. Install the dependencies:
